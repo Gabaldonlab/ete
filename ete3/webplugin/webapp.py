@@ -58,7 +58,7 @@ class WebTreeApplication(object):
         # Redirects normal output msgs to stderr, since stdout in web
         # application is for the browser
         sys.stdout = sys.stderr
-
+        
         self.TreeConstructor = None
         self.NODE_TARGET_ACTIONS = ["node", "face"]
         self.TREE_TARGET_ACTIONS = ["layout", "search"]
@@ -127,6 +127,7 @@ class WebTreeApplication(object):
                     nid2face_actions.setdefault(int(n._nid), []).append(aindex)
 
         html_map = '<MAP NAME="%s"  class="ete_tree_img">' %(mapid)
+
         if img_map["nodes"]:
             for x1, y1, x2, y2, nodeid, text in img_map["nodes"]:
                 text = "" if not text else text
@@ -166,16 +167,15 @@ class WebTreeApplication(object):
         # if no tree is given, and not in memmory, it tries to loaded
         # from previous sessions
         if treeid not in self._treeid2tree:
-            self._load_tree_from_path(self._treeid2cache[treeid])
+            self._load_tree_from_path(self._treeid2cache[treeid], treeid)
 
         # Returns True if tree and indexes are loaded
         return (treeid in self._treeid2tree) and (treeid in self._treeid2index)
 
-    def _load_tree_from_path(self, pkl_path):
+    def _load_tree_from_path(self, pkl_path, treeid):
         tree_path = os.path.join(self.CONFIG["temp_dir"], pkl_path)
         if os.path.exists(tree_path):
-            print(six.moves.cPickle.load(open(tree_path)))
-            t = self._treeid2tree[treeid] = six.moves.cPickle.load(open(tree_path))
+            t = self._treeid2tree[treeid] = six.moves.cPickle.load(open(tree_path, 'rb'))
             self._load_tree_index(treeid)
             return True
         else:
@@ -200,10 +200,8 @@ class WebTreeApplication(object):
     def _get_tree_img(self, treeid, pre_drawing_action=None):
         img_url = os.path.join(self.CONFIG["temp_url"], treeid+".png?"+str(time.time()))
         img_path = os.path.join(self.CONFIG["temp_dir"], treeid+".png")
-
         t = self._treeid2tree[treeid]
         tree_index = self._treeid2index[treeid]
-
         if pre_drawing_action:
             atype, handler, arguments = pre_drawing_action
             if atype in set(["node", "face"]) and len(arguments)==1 and handler:
@@ -216,7 +214,6 @@ class WebTreeApplication(object):
                 handler(t, arguments[0])
             elif atype == "layout":
                 self._treeid2layout[treeid] = handler
-
         layout_fn = self._treeid2layout.get(treeid, self._layout)
         mapid = "img_map_"+str(time.time())
         img_map = _render_tree(t, img_path, self.CONFIG["DISPLAY"], layout = layout_fn,
@@ -230,25 +227,22 @@ class WebTreeApplication(object):
             if hasattr(n, "_QtItem_"):
                 n._QtItem_ = None
                 delattr(n, "_QtItem_")
-
         tree_actions = []
         for aindex, (action, target, handler, checker, html_generator) in enumerate(self.actions):
             if target in self.TREE_TARGET_ACTIONS and (not checker or checker(t)):
                 tree_actions.append(aindex)
-
         try:
             version_tag = __version__
         except NameError:
             version_tag = "ete3"
-
         self._dump_tree_to_file(t, treeid)
-
         ete_publi = '<div style="margin:0px;padding:0px;text-align:left;"><a href="http://etetoolkit.org" style="font-size:7pt;" target="_blank" >%s</a></div>' %\
             (version_tag)
         img_html = """<img id="%s" class="ete_tree_img" src="%s" USEMAP="#%s" onLoad='javascript:bind_popup();' onclick='javascript:show_context_menu("%s", "", "%s");' >""" %\
             (treeid, img_url, mapid, treeid, ','.join(map(str, tree_actions)))
 
         tree_div_id = "ETE_tree_"+str(treeid)
+
         return html_map+ '<div id="%s" >'%tree_div_id + img_html + ete_publi + "</div>"
 
     # WSGI web application
@@ -292,29 +286,30 @@ class WebTreeApplication(object):
 
         elif method == "get_menu":
             if not self._load_tree(treeid):
-                return "get_menu: Cannot load the tree: %s" %treeid
-
-            if nodeid:
-                tree_index = self._treeid2index[treeid]
-                node = tree_index[nodeid]
+                html = "get_menu: Cannot load the tree: %s" %treeid
             else:
-                node = None
-
-            if textface:
-                header = str(textface).strip()
-            else:
-                header = "Menu"
-            html = """<div id="ete_popup_header"><span id="ete_popup_header_text">%s</span><div id="ete_close_popup" onClick='hide_popup();'></div></div><ul>""" %\
-                (header)
-            for i in map(int, actions.split(",")):
-                aname, target, handler, checker, html_generator = self.actions[i]
-                if html_generator:
-                    html += html_generator(i, treeid, nodeid, textface, node)
+                if nodeid:
+                    tree_index = self._treeid2index[treeid]
+                    node = tree_index[nodeid]
                 else:
-                    html += """<li><a  href='javascript:void(0);' onClick='hide_popup(); run_action("%s", "%s", "%s");'> %s </a></li> """ %\
-                        (treeid, nodeid, i, aname)
-            html += '</ul>'
-            return html
+                    node = None
+                if textface:
+                    header = str(textface).strip()
+                else:
+                    header = "Menu"
+                html = """<div id="ete_popup_header"><span id="ete_popup_header_text">%s</span>
+                    <div id="ete_close_popup" onClick='hide_popup();'></div></div>
+                    <ul>""" % (header)
+                for i in map(int, actions.split(",")):
+
+                    aname, target, handler, checker, html_generator = self.actions[i]
+                    if html_generator:
+                        html += html_generator(i, treeid, nodeid, textface, node)
+                    else:
+                        html += """<li><a  href='javascript:void(0);' onClick='hide_popup(); run_action("%s", "%s", "%s");'> %s </a></li> """ %\
+                            (treeid, nodeid, i, aname)
+                html += '</ul>'
+            return [html.encode('utf-8')]
 
         elif method == "action":
             if not self._load_tree(treeid):
@@ -322,19 +317,19 @@ class WebTreeApplication(object):
 
             if aindex is None:
                 # just refresh tree
-                return self._get_tree_img(treeid=treeid)
+                return [self._get_tree_img(treeid=treeid).encode('utf-8')]
             else:
                 aname, target, handler, checker, html_generator = self.actions[int(aindex)]
-
             if target in set(["node", "face", "layout"]):
-                return self._get_tree_img(treeid=treeid, pre_drawing_action=[target, handler, [nodeid]])
+                return [self._get_tree_img(treeid=treeid, pre_drawing_action=[target, handler, [nodeid]]).encode('utf-8')]
             elif target in set(["search"]):
-                return self._get_tree_img(treeid=treeid, pre_drawing_action=[target, handler, [search_term]])
+                return [self._get_tree_img(treeid=treeid, pre_drawing_action=[target, handler, [search_term]]).encode('utf-8')]
             elif target in set(["refresh"]):
-                return self._get_tree_img(treeid=treeid)
-            return "Bad guy"
+                return [self._get_tree_img(treeid=treeid).encode('utf-8')]
+            return str.encode("Bad guy")
 
         elif self._external_app_handler:
+            print("Has to do with external app handler")
             return self._external_app_handler(environ, start_response, self.queries)
         else:
             return  '\n'.join(map(str, list(environ.items()))) + str(self.queries) + '\t\n'.join(environ['wsgi.input'])
@@ -342,5 +337,7 @@ class WebTreeApplication(object):
 def _render_tree(t, img_path, display, layout=None, tree_style=None,
                  w=None, h=None, units="px"):
     os.environ["DISPLAY"]=display
+    print("The display path  is  ", display)
+    print("The img path  is ", img_path)
     return t.render(img_path, layout = layout, tree_style=tree_style,
                     w=w, h=h, units=units)
