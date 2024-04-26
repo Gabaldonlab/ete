@@ -107,16 +107,16 @@ def parse_rst(path):
         sites[typ].setdefault ('aa', []).append (line[1])
         # get site class probability
         probs = []
-        for i in range (k):
+        for i in range(k):
             probs.append (float (line[2+i]))
-            sites [typ].setdefault ('p'+str(i), []).append (float (line[2+i]))
-        sites [typ].setdefault ('pv', []).append (max (probs))
+            sites [typ].setdefault('p' + str(i), []).append(float(line[2+i]))
+        sites [typ].setdefault ('pv', []).append (max(probs))
         # get most likely site class
         classe = int (line [3 + i])
-        sites[typ].setdefault ('class', []).append (classe)
+        sites[typ].setdefault ('class', []).append(classe)
         # if there, get omega and error
         try:
-            sites [typ].setdefault ('w' , []).append (float (line [4 + i]))
+            sites [typ].setdefault('w' , []).append(float (line [4 + i]))
         except IndexError:
             # in this case we are with branch-site A or A1 and we should sum
             # probabilities of categories 2a and 2b
@@ -218,7 +218,7 @@ def parse_paml (pamout, model):
         model._tree._label_as_paml()
     # starts parsing
     for i, line in enumerate (all_lines):
-        if line is '\n':
+        if line == '\n':
             continue
         # codon frequency
         if line.startswith('Codon frequencies under model'):

@@ -97,7 +97,7 @@ class NCBITaxa(object):
     Provides a local transparent connector to the NCBI taxonomy database.
     """
 
-    def __init__(self, dbfile=None, taxdump_file=None):
+    def __init__(self, dbfile=None, taxdump_file=None, update=True):
 
         if not dbfile:
             self.dbfile = DEFAULT_TAXADB
@@ -107,7 +107,7 @@ class NCBITaxa(object):
         if taxdump_file:
             self.update_taxonomy_database(taxdump_file)
 
-        if dbfile is None and not os.path.exists(self.dbfile):
+        if dbfile != DEFAULT_TAXADB and not os.path.exists(self.dbfile):
             print('NCBI database not present yet (first time used?)', file=sys.stderr)
             self.update_taxonomy_database(taxdump_file)
 
@@ -117,7 +117,7 @@ class NCBITaxa(object):
         self.db = None
         self._connect()
 
-        if not is_taxadb_up_to_date(self.dbfile):
+        if not is_taxadb_up_to_date(self.dbfile) and update:
             print('NCBI database format is outdated. Upgrading', file=sys.stderr)
             self.update_taxonomy_database(taxdump_file)
 
@@ -371,7 +371,7 @@ class NCBITaxa(object):
             elif intermediate_nodes:
                 return list(map(int, [n.name for n in tree.get_descendants()]))
             else:
-                return map(int, [n.name for n in tree])
+                return list(map(int, [n.name for n in tree]))
 
         elif intermediate_nodes:
             return [tid for tid, count in six.iteritems(descendants)]
@@ -410,11 +410,11 @@ class NCBITaxa(object):
             visited = set()
             start = prepostorder.index(root_taxid)
             try:
-            	end = prepostorder.index(root_taxid, start+1)
-            	subtree = prepostorder[start:end+1]
+                end = prepostorder.index(root_taxid, start+1)
+                subtree = prepostorder[start:end+1]
             except ValueError:
                 # If root taxid is not found in postorder, must be a tip node
-            	subtree = [root_taxid]
+                subtree = [root_taxid]
             leaves = set([v for v, count in Counter(subtree).items() if count == 1])
             nodes[root_taxid] = PhyloTree(name=str(root_taxid))
             current_parent = nodes[root_taxid]
@@ -666,7 +666,7 @@ class NCBITaxa(object):
 
 def load_ncbi_tree_from_dump(tar):
     from .. import Tree
-    # Download: http://ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz
+    # Download: http://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz
     parent2child = {}
     name2node = {}
     node2taxname = {}
@@ -755,7 +755,7 @@ def update_db(dbfile, targz_file=None):
         except ImportError:
             from urllib.request import urlretrieve
 
-        (md5_filename, _) = urlretrieve("https://ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz.md5")
+        (md5_filename, _) = urlretrieve("https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz.md5")
         with open(md5_filename, "r") as md5_file:
             md5_check = md5_file.readline().split()[0]
         targz_file = "taxdump.tar.gz"
@@ -766,14 +766,14 @@ def update_db(dbfile, targz_file=None):
             if local_md5 != md5_check:
                 do_download = True
                 print('Updating taxdump.tar.gz from NCBI FTP site (via HTTP)...', file=sys.stderr)
-                urlretrieve("http://ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz", targz_file)
+                urlretrieve("http://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz", targz_file)
                 print('Done. Parsing...', file=sys.stderr)
             else:
                 print('Local taxdump.tar.gz seems up-to-date', file=sys.stderr)
         else:
             do_download = True
             print('Downloading taxdump.tar.gz from NCBI FTP site (via HTTP)...', file=sys.stderr)
-            urlretrieve("http://ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz", targz_file)
+            urlretrieve("http://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz", targz_file)
             print('Done. Parsing...', file=sys.stderr)
 
     tar = tarfile.open(targz_file, 'r')
